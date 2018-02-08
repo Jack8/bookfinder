@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="stylesheet" href="milligram.min.css">
+    <meta charset="UTF-8">
+    <title>Book Finder</title>
+</head>
+<body>
+
+<div class="container" id="app-main">
+
+    <div class="row">
+        <div class="column column-50 column-offset-25">
+            <h1>Book Finder <small>beta</small></h1>
+            <input type="text" placeholder="Tytuł książki" id="title" v-model="title" @keyup.enter="submitSearch()">
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="column column-50 column-offset-25">
+            <input class="button-primary" type="button" value="Szukaj" @click="submitSearch()">
+            <input class="button-primary" type="button" value="Szczęśliwy traf" @click="luckySearch()">
+        </div>
+    </div>
+
+    <template v-for="error in errors">
+        <div class="row">
+            <span class="column column-50 column-offset-25">{{error}}</span>
+        </div>
+    </template>
+
+    <template v-for="(book, index) in books">
+        <div class="row">
+            <span class="column">{{index + 1}}</span>
+            <span class="column column-60">
+                <div><strong>{{book.title}}</strong></div>
+                <div>ISBN: {{book.isbn}}</div>
+                <div>Wydawca: {{book.publisher}}</div>
+            </span>
+            <span class="column column-40">
+                <div>Oferty:</div>
+                <div v-if="!book.offers.length"><small>brak</small></div>
+
+                <template v-for="(offer, index) in book.offers">
+                    <div class="row">
+                        <span class="column column-70">
+                            <span v-if="index === 0">
+                                <strong>{{offer.price}} {{offer.currency}}</strong> (najlepsza cena)
+                            </span>
+                            <span v-else>
+                                {{offer.price}} {{offer.currency}}
+                            </span>
+                        </span>
+                        <span class="column column-30"><a :href="offer.link">link</a></span>
+                    </div>
+                </template>
+            </span>
+        </div>
+    </template>
+
+</div>
+
+</body>
+</html>
+
+<script src="vue.min.js"></script>
+<script>
+
+    const vm = new Vue({
+        el: "#app-main",
+        data: {
+            title: "",
+            books: [],
+            errors: [],
+            socket: {},
+            lucky: ["java 9 revealed", "spring boot 2", "exploring java 9", "pro jpa 2", "pro spring 5"]
+        },
+
+        created () {
+            let host = window.location.host;
+            let appPath = window.location.pathname;
+
+            this.socket = new WebSocket("ws://" + host + appPath + "/books");
+            this.socket.onmessage = this.onMessage;
+        },
+
+        methods: {
+            luckySearch() {
+                this.title = this.lucky[Math.floor(Math.random()*this.lucky.length)];
+                this.submitSearch();
+            },
+            submitSearch() {
+                this.books = [];
+                this.errors = [];
+                this.sendMessage(this.title);
+            },
+            sendMessage(message) {
+                console.log("searching >> " + message);
+                this.socket.send(message);
+            },
+            onMessage(event) {
+                let book = JSON.parse(event.data);
+                console.log(book);
+
+                switch (book.status) {
+                    case "FOUND_BOOK":
+                        book.offers = [];
+                        this.books.push(book);
+                        break;
+                    case "FOUND_OFFER":
+                        this.books.filter(el => el.isbn === book.isbn)
+                            .forEach(el => {
+                                el.offers.push(book);
+                                el.offers.sort((a,b) => a.price - b.price);
+                            });
+                        break;
+                    case "NOT_FOUND":
+                        this.errors.push("Brak wyników");
+                        break;
+                }
+            }
+        }
+    });
+
+</script>
